@@ -62,16 +62,21 @@ const addMessage = (text, type, debugContext = null) => {
     chatBox.scrollTop = chatBox.scrollHeight;
 };
 
-const handleSend = async (queryText = null) => {
-    const query = queryText || userInput.value.trim();
+const handleSend = async (incomingCommand = null) => { // Renamed for clarity: it's an incoming command
+    // Prioritize the incoming command. If none, read from the input box.
+    const query = incomingCommand || userInput.value.trim(); 
     if (!query) return;
 
     addMessage(query, 'user');
     userInput.value = '';
 
-    if (suggestionBox.style.display !== 'none') {
+    // === THE STRATEGIC DECISION POINT ===
+    // If the command came FROM THE INPUT BOX (not a button click), THEN hide the suggestions.
+    // If it came from a button (incomingCommand is not null), leave the suggestions visible.
+    if (incomingCommand === null && suggestionBox.style.display !== 'none') {
         suggestionBox.style.display = 'none'; 
     }
+    // =====================================
 
     const typingIndicator = showTypingIndicator();
 
