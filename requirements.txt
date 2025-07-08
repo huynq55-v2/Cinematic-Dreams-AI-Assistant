@@ -3,4 +3,3 @@ uvicorn
 google-generativeai
 numpy
 python-multipart
-gradio
