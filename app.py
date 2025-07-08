@@ -34,7 +34,7 @@ def forge_the_brain():
     embedding_model = "models/text-embedding-004" # Using default for consistency
     
     all_embeddings = []
-    batch_size = 5 # Process 5 shards at a time
+    batch_size = 50 # Process 5 shards at a time
     for i in range(0, len(shards), batch_size):
         batch = shards[i:i+batch_size]
         print(f"  - Processing batch {i//batch_size + 1}...")
