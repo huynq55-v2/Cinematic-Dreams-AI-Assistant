@@ -193,5 +193,5 @@ async def suggest_questions():
     return {"related": related_questions_list, "unrelated": unrelated_questions_chosen}
 
 # The __main__ block is removed because the deployment platform will handle running uvicorn.
-# if __name__ == "__main__":
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
