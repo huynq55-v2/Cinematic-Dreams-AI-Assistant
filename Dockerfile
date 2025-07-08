@@ -10,10 +10,9 @@ COPY . /app
 # Cài đặt tất cả các gói Python cần thiết từ requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Mở cổng 8000 để ứng dụng có thể truy cập được từ bên ngoài container
-EXPOSE 8000
+# MỞ CỔNG 7860: Đây là cổng mà Hugging Face Spaces thường mong đợi.
+EXPOSE 7860
 
 # Lệnh sẽ được chạy khi container khởi động.
-# Nó khởi động server Uvicorn và chạy ứng dụng FastAPI của bạn.
-# GOOGLE_API_KEY sẽ được lấy từ biến môi trường của Hugging Face Spaces.
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Buộc Uvicorn lắng nghe trên cổng $PORT (do HF cung cấp) hoặc 7860.
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-7860}"]
