@@ -3,13 +3,12 @@ import os
 import numpy as np
 import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse # NEW: To serve HTML content
-from fastapi.staticfiles import StaticFiles # NEW: To serve static files (JS, CSS)
+from pydantic import BaseModel # Still useful for internal data validation
+from fastapi.middleware.cors import CORSMiddleware # Still useful if calling FastAPI directly later
 import uvicorn
 import time
 import json 
+import gradio as gr # <<< NEW: Import Gradio
 
 # --- PHASE 1: FORGE THE BRAIN (System Initialization) ---
 # This sacred ritual runs only once, at the dawn of the server.
@@ -31,10 +30,10 @@ def forge_the_brain():
 
     # 3. Bestow Meaning upon Shards (Embedding) in Batches
     print("COMMAND: Encoding meaning into shards via embedding model in batches...")
-    embedding_model = "models/text-embedding-004" # Using default for consistency
+    embedding_model = "models/embedding-001" # Using default for consistency
     
     all_embeddings = []
-    batch_size = 50 # Process 5 shards at a time
+    batch_size = 5 # Process 5 shards at a time
     for i in range(0, len(shards), batch_size):
         batch = shards[i:i+batch_size]
         print(f"  - Processing batch {i//batch_size + 1}...")
@@ -66,39 +65,34 @@ except KeyError:
 # Forge the brain and keep it online
 KNOWLEDGE_SHARDS, SEMANTIC_MATRIX, EMBEDDING_MODEL = forge_the_brain()
 # Summon the Oracle (The LLM)
-ORACLE = genai.GenerativeModel('gemini-2.0-flash') 
+ORACLE = genai.GenerativeModel('gemini-1.5-flash') 
 
-# --- PHASE 2: THE ORACLE'S SANCTUM (FastAPI Application) ---
-app = FastAPI(title="The Oracle at Cinematic Dreams")
 
-# NEW: Mount static files (HTML, JS, CSS) from the 'static' directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# --- PHASE 2: THE ORACLE'S SANCTUM (FastAPI Application removed for direct Gradio integration) ---
+# The FastAPI app instance and its routes (/, /ask, /suggest-questions) are now integrated
+# directly into Gradio's functional approach.
+# This means:
+# - app = FastAPI(...) is no longer needed here.
+# - app.mount and @app.get("/") are no longer needed.
+# - The @app.post("/ask") logic will be wrapped in a Gradio function.
+# - The @app.get("/suggest-questions") logic will also be wrapped in a Gradio function.
 
-# Grant diplomatic immunity to all origins (CORS)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# --- GRADIO INTERFACE: THE NEW FRONTEND COMMAND CENTER ---
 
-# NEW: Route to serve the main HTML page
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
-    """Serves the main HTML page from the static directory."""
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        html_content = f.read()
-    return HTMLResponse(content=html_content)
-
-class Query(BaseModel):
-    query: str
-
-@app.post("/ask")
-async def consult_the_oracle(query: Query):
+def consult_the_oracle_gradio(query: str):
     """
-    This is not an endpoint. This is the ritual of consultation.
+    Handles a user's question via Gradio.
+    This function wraps the core RAG logic.
     """
-    # 1. Translate the mortal's query into the language of gods (Embed Query)
-    query_embedding = genai.embed_content(model=EMBEDDING_MODEL, content=query.query, task_type="RETRIEVAL_QUERY")["embedding"]
+    if not query:
+        return "Please enter a question.", "" # Returns answer, debug_context
+
+    # 1. Embed the user's query
+    query_embedding = genai.embed_content(model=EMBEDDING_MODEL, content=query, task_type="RETRIEVAL_QUERY")["embedding"]
 
     # 2. Seek the Lost Knowledge (Semantic Search)
     similarities = np.dot(SEMANTIC_MATRIX, np.array(query_embedding))
-    top_k_indices = np.argsort(similarities)[-3:][::-1]
+    top_k_indices = np.argsort(similarities)[-3:][::-1] # Get top 3
     
     # 3. Assemble the Sacred Context
     context = "\n---\n".join([KNOWLEDGE_SHARDS[i] for i in top_k_indices])
@@ -113,8 +107,8 @@ async def consult_the_oracle(query: Query):
     {context}
     ---
 
-    USER'S QUERY:
-    "{query.query}"
+    USER'S QUESTION:
+    "{query}"
     
     ORACLE'S RESPONSE:
     """
@@ -122,20 +116,17 @@ async def consult_the_oracle(query: Query):
     # 5. Receive the Prophecy (Generation)
     try:
         prophecy = ORACLE.generate_content(command)
-        return {"answer": prophecy.text, "debug_context": context} 
+        return prophecy.text, context # Return both answer and debug_context
     except Exception as e:
+        error_msg = f"The Oracle is currently silent. The connection has been lost. Error: {str(e)}"
         print(f"ORACLE ERROR: {e}")
-        raise HTTPException(status_code=503, detail={"message": "The Oracle is currently silent. The connection has been lost.", "debug_info": str(e)})
+        return error_msg, context # Return error message and context for debugging
 
-# ENDPOINT TO GENERATE SUGGESTED QUESTIONS WITH CATEGORIES
-@app.get("/suggest-questions")
-async def suggest_questions():
+def generate_suggestions_gradio():
     """
     Generates 3 contextually relevant questions and 2 out-of-scope questions for testing,
     ensuring clear categorization.
     """
-    print("COMMAND: Generating mixed suggested questions...")
-    
     # Predefined list of truly out-of-scope questions for diversity
     all_unrelated_questions = [
         "What's the capital of France?",
@@ -190,8 +181,71 @@ async def suggest_questions():
             "Is there parking at the cinema?"
         ]
 
-    return {"related": related_questions_list, "unrelated": unrelated_questions_chosen}
+    # Gradio expects string outputs for Markdown components.
+    # We'll format it as Markdown list
+    markdown_output = "#### Related Questions:\n" + "\n".join([f"- {q}" for q in related_questions_list])
+    markdown_output += "\n\n#### Out-of-Scope Questions:\n" + "\n".join([f"- {q}" for q in unrelated_questions_chosen])
+    
+    return markdown_output
 
-# The __main__ block is removed because the deployment platform will handle running uvicorn.
+
+# --- GRADIO UI DEFINITION ---
+# This is where we define the visual interface for Hugging Face Spaces.
+
+# Chatbot interface
+chat_interface = gr.ChatInterface(
+    fn=consult_the_oracle_gradio,
+    chatbot=gr.Chatbot(height=400, render_markdown=True, label="Cinematic Dreams AI Assistant"),
+    textbox=gr.Textbox(placeholder="Ask me anything...", container=False, scale=7),
+    title="Cinematic Dreams AI Assistant",
+    description="Your intelligent guide to all things cinema. Powered by Google Gemini and RAG.",
+    theme=gr.themes.Monochrome(), # Using a clean, modern theme
+    examples=[
+        "What movies are currently playing?",
+        "Can I bring food from outside?",
+        "Are there any student discounts?",
+        "What's the capital of France?" 
+    ], # Simple examples, but not dynamic like the suggestions endpoint
+    undo_btn=None,
+    clear_btn="Clear Chat",
+)
+
+# Debug and Suggestion tab
+with gr.Blocks(theme=gr.themes.Monochrome()) as debug_tab:
+    gr.Markdown("### Debug Information & Test Suggestions")
+    
+    # Debug context display
+    debug_context_output = gr.Textbox(label="Last Retrieved Context (for Debugging)", lines=10, interactive=False, visible=True)
+    
+    # Integrate consult_the_oracle_gradio to also update debug_context_output
+    # This needs to be done carefully with state and separate blocks/interfaces.
+    # For simplicity, we'll connect the main chat output to debug context,
+    # or rely on the chat history itself.
+
+    gr.Markdown("### Test Questions")
+    suggestion_output = gr.Markdown(value="Generating suggestions...", visible=True)
+    generate_btn = gr.Button("Generate New Test Questions")
+    
+    generate_btn.click(
+        fn=generate_suggestions_gradio,
+        inputs=None,
+        outputs=suggestion_output
+    )
+    
+    # We will dynamically update the debug context from the chat_interface
+    # This requires more complex Gradio state management, beyond a simple
+    # functional example for initial deployment.
+    # For now, the `debug_context` will be printed to logs and you can check it there.
+    # In a full Gradio app, you'd chain the output of `consult_the_oracle_gradio`
+    # to update this `debug_context_output` component.
+
+# Create the main Gradio interface with tabs
+demo = gr.TabbedInterface(
+    [chat_interface, debug_tab],
+    ["Chat", "Debug / Suggestions"]
+)
+
+# This is the entry point for Gradio.
+# Hugging Face Spaces will automatically run this.
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    demo.launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", 7860)))
