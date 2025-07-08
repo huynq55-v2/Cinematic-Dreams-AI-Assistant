@@ -31,7 +31,7 @@ def forge_the_brain():
 
     # 3. Bestow Meaning upon Shards (Embedding) in Batches
     print("COMMAND: Encoding meaning into shards via embedding model in batches...")
-    embedding_model = "models/embedding-001" # Using default for consistency
+    embedding_model = "models/text-embedding-004" # Using default for consistency
     
     all_embeddings = []
     batch_size = 5 # Process 5 shards at a time
@@ -66,7 +66,7 @@ except KeyError:
 # Forge the brain and keep it online
 KNOWLEDGE_SHARDS, SEMANTIC_MATRIX, EMBEDDING_MODEL = forge_the_brain()
 # Summon the Oracle (The LLM)
-ORACLE = genai.GenerativeModel('gemini-1.5-flash') 
+ORACLE = genai.GenerativeModel('gemini-2.0-flash') 
 
 # --- PHASE 2: THE ORACLE'S SANCTUM (FastAPI Application) ---
 app = FastAPI(title="The Oracle at Cinematic Dreams")
