@@ -194,4 +194,7 @@ async def suggest_questions():
 
 # The __main__ block is removed because the deployment platform will handle running uvicorn.
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os
+    # IMPORTANT: Force to port 7860, as this is often implicitly expected by Hugging Face Spaces
+    # regardless of SDK, especially if the space was ever Gradio.
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 7860)))
